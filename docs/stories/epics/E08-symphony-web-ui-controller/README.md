@@ -26,6 +26,8 @@ Symphony records.
 8. `US-056` - Simplified Kanban-first controller reference revamp.
 9. `US-057` - Dependency graph sidebar view.
 10. `US-058` - Scrollable board columns.
+11. `US-059` - Electron desktop shell.
+12. `US-060` - Human-readable chat logs.
 
 ## Exit Criteria
 
@@ -38,3 +40,5 @@ Symphony records.
 - Dependency cycles are detected and shown as task breakdown problems.
 - Browser-level validation proves the board, task detail, event stream, review,
   and sync workflows.
+- The same controller can be rebuilt into an Electron desktop shell without
+  changing Harness or Symphony state ownership.

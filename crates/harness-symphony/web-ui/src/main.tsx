@@ -8,7 +8,6 @@ import {
   Clock3,
   GitBranch,
   GitPullRequestArrow,
-  GripVertical,
   Loader2,
   Play,
   RefreshCw,
@@ -22,6 +21,7 @@ import { Card } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import { Separator } from "./components/ui/separator";
 import { cn } from "./lib/utils";
+import { formatRunLog } from "./run-log";
 import "./styles.css";
 
 type BoardState =
@@ -53,10 +53,7 @@ type BoardResponse = {
   items: BoardItem[];
 };
 
-type RunEvent = {
-  method?: string;
-  params?: unknown;
-};
+type RunEvent = unknown;
 
 type EventsResponse = {
   run_id: string;
@@ -126,8 +123,6 @@ function App() {
   const [startingId, setStartingId] = React.useState<string | null>(null);
   const [syncingRunId, setSyncingRunId] = React.useState<string | null>(null);
   const [markingMergedRunId, setMarkingMergedRunId] = React.useState<string | null>(null);
-  const [detailWidth, setDetailWidth] = React.useState(520);
-  const workspaceRef = React.useRef<HTMLDivElement>(null);
 
   const loadBoard = React.useCallback(async () => {
     setLoading(true);
@@ -249,31 +244,6 @@ function App() {
     [loadBoard]
   );
 
-  const beginResize = React.useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      event.preventDefault();
-      const target = event.currentTarget;
-      target.setPointerCapture(event.pointerId);
-      const move = (moveEvent: PointerEvent) => {
-        const rect = workspaceRef.current?.getBoundingClientRect();
-        if (!rect) {
-          return;
-        }
-        const next = Math.max(280, Math.min(Math.min(860, window.innerWidth * 0.68), rect.right - moveEvent.clientX - 12));
-        setDetailWidth(next);
-      };
-      const stop = () => {
-        target.removeEventListener("pointermove", move);
-        target.removeEventListener("pointerup", stop);
-        target.removeEventListener("pointercancel", stop);
-      };
-      target.addEventListener("pointermove", move);
-      target.addEventListener("pointerup", stop);
-      target.addEventListener("pointercancel", stop);
-    },
-    []
-  );
-
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto grid w-full max-w-[1720px] grid-cols-1 gap-4 p-3 md:p-4 lg:grid-cols-[224px_minmax(0,1fr)] xl:p-6">
@@ -317,20 +287,13 @@ function App() {
 
           <section
             id="board"
-            ref={workspaceRef}
-            className={cn(
-              "grid min-h-[calc(100dvh-220px)] gap-3",
-              selected
-                ? "xl:grid-cols-[minmax(360px,1fr)_14px_minmax(280px,var(--detail-width))]"
-                : "grid-cols-1"
-            )}
-            style={{ "--detail-width": `${detailWidth}px` } as React.CSSProperties}
+            className="grid min-h-[calc(100dvh-220px)] grid-cols-1 gap-3"
           >
             <BoardGrid items={filtered} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-            {selected ? (
-              <ResizeHandle detailWidth={detailWidth} onPointerDown={beginResize} onWidthChange={setDetailWidth} />
-            ) : null}
-            {selected ? (
+          </section>
+
+          {selected ? (
+            <TaskDetailOverlay onClose={() => setSelectedId(null)}>
               <TaskDetail
                 item={selected}
                 startingId={startingId}
@@ -341,8 +304,8 @@ function App() {
                 onSync={syncRun}
                 onMarkPrMerged={markPrMerged}
               />
-            ) : null}
-          </section>
+            </TaskDetailOverlay>
+          ) : null}
 
           <p className="text-xs leading-5 text-muted-foreground">
             Source: local Symphony API responses for board state, run events, review artifacts, PR status, and sync state.
@@ -634,40 +597,19 @@ function TaskCard({
   );
 }
 
-function ResizeHandle({
-  detailWidth,
-  onPointerDown,
-  onWidthChange
-}: {
-  detailWidth: number;
-  onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
-  onWidthChange: (width: number) => void;
-}) {
+function TaskDetailOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <button
-      type="button"
-      className="hidden min-h-[calc(100dvh-220px)] cursor-col-resize rounded-sm border-x border-border bg-muted text-muted-foreground hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:grid xl:place-items-center"
-      role="separator"
-      aria-label="Resize selected work detail panel"
-      aria-orientation="vertical"
-      aria-valuemin={280}
-      aria-valuemax={860}
-      aria-valuenow={Math.round(detailWidth)}
-      onPointerDown={onPointerDown}
-      onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          onWidthChange(Math.min(860, detailWidth + 24));
-        }
-        if (event.key === "ArrowRight") {
-          event.preventDefault();
-          onWidthChange(Math.max(280, detailWidth - 24));
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/25 px-3 py-4 backdrop-blur-[2px] sm:px-5 lg:py-8"
+      data-testid="task-detail-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
         }
       }}
-      onDoubleClick={() => onWidthChange(520)}
     >
-      <GripVertical className="size-4" />
-    </button>
+      {children}
+    </div>
   );
 }
 
@@ -692,6 +634,11 @@ function TaskDetail({
 }) {
   const [events, setEvents] = React.useState<RunEvent[]>([]);
   const [review, setReview] = React.useState<ReviewResponse | null>(null);
+  const dialogRef = React.useRef<HTMLElement>(null);
+
+  React.useEffect(() => {
+    dialogRef.current?.focus();
+  }, [item.id]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -764,7 +711,12 @@ function TaskDetail({
   return (
     <aside
       aria-label="Selected work detail"
-      className="min-w-0 overflow-auto rounded-lg border border-border bg-background shadow-md xl:sticky xl:top-4 xl:max-h-[calc(100dvh-48px)]"
+      aria-modal="true"
+      className="relative max-h-[calc(100dvh-2rem)] min-w-0 w-full max-w-4xl overflow-auto rounded-lg border border-border bg-background shadow-2xl outline-none"
+      data-testid="task-detail-popup"
+      ref={dialogRef}
+      role="dialog"
+      tabIndex={-1}
     >
       <Button
         type="button"
@@ -922,42 +874,42 @@ function TextBlock({ title, text }: { title: string; text: string }) {
 }
 
 function EventLog({ events }: { events: RunEvent[] }) {
-  const recent = events.slice(-8).reverse();
+  const entries = formatRunLog(events).slice(-12);
 
   return (
     <div id="logs" className="flex flex-col gap-3 p-4">
       <div className="flex items-baseline justify-between gap-3">
-        <SectionTitle>Codex App Server events</SectionTitle>
-        <p className="text-xs text-muted-foreground">APP_SERVER_EVENTS.jsonl</p>
+        <SectionTitle>Run communication</SectionTitle>
+        <p className="text-xs text-muted-foreground">Raw artifact: APP_SERVER_EVENTS.jsonl</p>
       </div>
-      <div className="max-h-64 overflow-auto rounded-md border border-border bg-muted">
-        {recent.length > 0 ? (
-          recent.map((event, index) => (
+      <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted">
+        {entries.length > 0 ? (
+          entries.map((entry, index) => (
             <div
-              key={`${event.method ?? "event"}-${index}`}
-              className="grid min-h-9 grid-cols-[minmax(0,1fr)] gap-2 border-b border-border/70 px-3 py-2 text-xs last:border-b-0"
+              key={`${entry.method ?? entry.title}-${index}`}
+              className={cn(
+                "grid min-h-12 grid-cols-[minmax(0,1fr)] gap-2 border-b border-border/70 px-3 py-3 text-sm last:border-b-0",
+                entry.kind === "message" ? "bg-background" : "bg-muted"
+              )}
             >
-              <strong className="font-mono">{event.method ?? "event"}</strong>
-              {event.params ? <span className="line-clamp-2 text-muted-foreground">{summarizeEvent(event.params)}</span> : null}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={entry.kind === "message" ? "review" : entry.kind === "progress" ? "progress" : "neutral"}>
+                    {entry.source}
+                  </Badge>
+                  <strong className="font-semibold">{entry.title}</strong>
+                </div>
+                {entry.timestamp ? <span className="text-xs text-muted-foreground">{entry.timestamp}</span> : null}
+              </div>
+              <p className="break-words text-sm leading-6 text-muted-foreground">{entry.message}</p>
             </div>
           ))
         ) : (
-          <div className="flex min-h-12 items-center px-3 text-sm text-muted-foreground">No events yet</div>
+          <div className="flex min-h-12 items-center px-3 text-sm text-muted-foreground">No run communication yet</div>
         )}
       </div>
     </div>
   );
-}
-
-function summarizeEvent(params: unknown) {
-  if (typeof params === "string") {
-    return params;
-  }
-  try {
-    return JSON.stringify(params);
-  } catch {
-    return "event payload";
-  }
 }
 
 function Field({ label, value }: { label: string; value: string }) {
