@@ -29,6 +29,7 @@ Symphony records.
 11. `US-059` - Electron desktop shell.
 12. `US-060` - Human-readable chat logs.
 13. `US-061` - FrankenTUI app server log TUI.
+14. `US-062` - Confetti close effect for the task detail popup.
 
 ## Exit Criteria
 
