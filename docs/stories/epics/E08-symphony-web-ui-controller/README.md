@@ -28,6 +28,7 @@ Symphony records.
 10. `US-058` - Scrollable board columns.
 11. `US-059` - Electron desktop shell.
 12. `US-060` - Human-readable chat logs.
+13. `US-061` - FrankenTUI app server log TUI.
 
 ## Exit Criteria
 
@@ -42,3 +43,5 @@ Symphony records.
   and sync workflows.
 - The same controller can be rebuilt into an Electron desktop shell without
   changing Harness or Symphony state ownership.
+- Technical maintainers can optionally inspect local app-server logs from a
+  terminal TUI without replacing the browser or Electron review surfaces.
