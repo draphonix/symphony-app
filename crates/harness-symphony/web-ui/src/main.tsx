@@ -87,6 +87,12 @@ type PrMergedResponse = {
   pr_status: string;
 };
 
+type ConfettiBurst = {
+  id: number;
+  x: number;
+  y: number;
+};
+
 const states: BoardState[] = [
   "Ready",
   "Blocked",
@@ -117,12 +123,15 @@ const stateTone = {
 function App() {
   const [items, setItems] = React.useState<BoardItem[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [confettiBursts, setConfettiBursts] = React.useState<ConfettiBurst[]>([]);
   const [query, setQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [startingId, setStartingId] = React.useState<string | null>(null);
   const [syncingRunId, setSyncingRunId] = React.useState<string | null>(null);
   const [markingMergedRunId, setMarkingMergedRunId] = React.useState<string | null>(null);
+  const confettiBurstIdRef = React.useRef(0);
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   const loadBoard = React.useCallback(async () => {
     setLoading(true);
@@ -172,6 +181,26 @@ function App() {
     [items]
   );
   const activeRun = items.find((item) => item.active_run);
+
+  const clearConfettiBurst = React.useCallback((id: number) => {
+    setConfettiBursts((current) => current.filter((burst) => burst.id !== id));
+  }, []);
+
+  const closeSelectedTask = React.useCallback(
+    (origin?: HTMLElement) => {
+      if (origin && !prefersReducedMotion) {
+        const rect = origin.getBoundingClientRect();
+        const burst: ConfettiBurst = {
+          id: (confettiBurstIdRef.current += 1),
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2
+        };
+        setConfettiBursts((current) => [...current.slice(-2), burst]);
+      }
+      setSelectedId(null);
+    },
+    [prefersReducedMotion]
+  );
 
   const startTask = React.useCallback(
     async (storyId: string) => {
@@ -292,6 +321,8 @@ function App() {
             <BoardGrid items={filtered} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </section>
 
+          <ConfettiBurstHost bursts={confettiBursts} onBurstDone={clearConfettiBurst} />
+
           {selected ? (
             <TaskDetailOverlay onClose={() => setSelectedId(null)}>
               <TaskDetail
@@ -299,7 +330,7 @@ function App() {
                 startingId={startingId}
                 syncingRunId={syncingRunId}
                 markingMergedRunId={markingMergedRunId}
-                onClose={() => setSelectedId(null)}
+                onClose={closeSelectedTask}
                 onStart={startTask}
                 onSync={syncRun}
                 onMarkPrMerged={markPrMerged}
@@ -314,6 +345,25 @@ function App() {
       </div>
     </main>
   );
+}
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(() =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    function syncPreference() {
+      setPrefersReducedMotion(mediaQuery.matches);
+    }
+
+    syncPreference();
+    mediaQuery.addEventListener("change", syncPreference);
+    return () => mediaQuery.removeEventListener("change", syncPreference);
+  }, []);
+
+  return prefersReducedMotion;
 }
 
 function SidebarDependencyGraph({
@@ -613,6 +663,62 @@ function TaskDetailOverlay({ children, onClose }: { children: React.ReactNode; o
   );
 }
 
+const confettiPieces = [
+  { x: -44, y: -34, color: "#f97316", rotation: "18deg" },
+  { x: -28, y: 22, color: "#22c55e", rotation: "-30deg" },
+  { x: -10, y: -50, color: "#0ea5e9", rotation: "42deg" },
+  { x: 14, y: 28, color: "#eab308", rotation: "-18deg" },
+  { x: 34, y: -36, color: "#ec4899", rotation: "28deg" },
+  { x: 48, y: 12, color: "#6366f1", rotation: "-42deg" },
+  { x: 4, y: -18, color: "#14b8a6", rotation: "12deg" },
+  { x: 26, y: -4, color: "#ef4444", rotation: "36deg" }
+] as const;
+
+function ConfettiBurstHost({
+  bursts,
+  onBurstDone
+}: {
+  bursts: ConfettiBurst[];
+  onBurstDone: (id: number) => void;
+}) {
+  React.useEffect(() => {
+    const timers = bursts.map((burst) => window.setTimeout(() => onBurstDone(burst.id), 900));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [bursts, onBurstDone]);
+
+  if (bursts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div aria-hidden="true" className="task-close-confetti-host" data-testid="task-close-confetti-host">
+      {bursts.map((burst) => (
+        <div
+          key={burst.id}
+          className="task-close-confetti-burst"
+          data-testid="task-close-confetti"
+          style={{ left: burst.x, top: burst.y }}
+        >
+          {confettiPieces.map((piece, index) => (
+            <span
+              key={`${piece.color}-${index}`}
+              className="task-close-confetti-piece"
+              style={
+                {
+                  "--confetti-x": `${piece.x}px`,
+                  "--confetti-y": `${piece.y}px`,
+                  "--confetti-r": piece.rotation,
+                  backgroundColor: piece.color
+                } as React.CSSProperties
+              }
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TaskDetail({
   item,
   startingId,
@@ -627,7 +733,7 @@ function TaskDetail({
   startingId: string | null;
   syncingRunId: string | null;
   markingMergedRunId: string | null;
-  onClose: () => void;
+  onClose: (origin?: HTMLElement) => void;
   onStart: (storyId: string) => Promise<void>;
   onSync: (runId: string) => Promise<void>;
   onMarkPrMerged: (runId: string) => Promise<void>;
@@ -724,7 +830,7 @@ function TaskDetail({
         size="icon"
         aria-label="Close selected work detail"
         className="sticky top-3 z-10 float-right m-3 bg-background shadow-sm"
-        onClick={onClose}
+        onClick={(event) => onClose(event.currentTarget)}
       >
         <X data-icon="inline-start" />
       </Button>
