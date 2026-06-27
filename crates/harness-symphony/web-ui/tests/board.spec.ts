@@ -47,6 +47,54 @@ test("board renders task columns and detail controls", async ({ page }) => {
   await expect(detail.getByRole("button", { name: /Start/ })).toBeVisible();
 });
 
+test("task detail close button closes popup and plays bounded confetti", async ({ page }) => {
+  await page.route("**/api/board", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [boardItem("US-062", "Task Detail Close Confetti", "Ready")]
+      })
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /US-062/ }).click();
+
+  const detail = page.getByRole("dialog", { name: "Selected work detail" });
+  await expect(detail.getByRole("heading", { name: "Task Detail Close Confetti" })).toBeVisible();
+  await detail.getByRole("button", { name: "Close selected work detail" }).click();
+
+  await expect(detail).toBeHidden();
+  await expect(page.getByTestId("task-close-confetti")).toBeVisible();
+  await expect(page.getByRole("button", { name: /US-062/ })).toBeVisible();
+  await expect(page.getByTestId("task-close-confetti-host")).toHaveCount(0, { timeout: 2000 });
+
+  await page.getByRole("button", { name: /US-062/ }).click();
+  await expect(page.getByRole("dialog", { name: "Selected work detail" })).toBeVisible();
+});
+
+test("task detail close keeps working with reduced motion confetti suppressed", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/board", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [boardItem("US-062", "Task Detail Close Confetti", "Ready")]
+      })
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /US-062/ }).click();
+
+  const detail = page.getByRole("dialog", { name: "Selected work detail" });
+  await expect(detail).toBeVisible();
+  await detail.getByRole("button", { name: "Close selected work detail" }).click();
+
+  await expect(detail).toBeHidden();
+  await expect(page.getByTestId("task-close-confetti-host")).toHaveCount(0);
+});
+
 test("sidebar renders dependency graph edges and selects tasks", async ({ page }) => {
   await page.route("**/api/board", async (route) => {
     await route.fulfill({

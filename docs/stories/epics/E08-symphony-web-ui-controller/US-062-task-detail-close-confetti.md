@@ -2,7 +2,7 @@
 
 ## Status
 
-planned
+implemented
 
 ## Lane
 
@@ -66,4 +66,19 @@ No process change.
 
 ## Evidence
 
-Planned story only. Add implementation evidence after validation exists.
+- Implemented a shared React Web UI close-button confetti burst that starts
+  when the floating task detail popup `X` button is clicked, then closes the
+  popup immediately without API, board-state, run-state, or durable-record
+  changes.
+- Added bounded cleanup for transient confetti bursts and reduced-motion
+  suppression.
+- Added Playwright coverage for close behavior, confetti rendering and cleanup,
+  and reduced-motion close behavior.
+- Validation passed:
+  `npm --prefix crates/harness-symphony/web-ui run build`;
+  `npm --prefix crates/harness-symphony/web-ui run e2e`;
+  `npm --prefix crates/harness-symphony/web-ui run desktop:smoke`;
+  `cargo test --workspace`;
+  `cargo fmt --check`;
+  `cargo clippy --workspace -- -D warnings`;
+  `git diff --check`.
